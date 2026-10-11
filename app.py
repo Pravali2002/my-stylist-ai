@@ -39,6 +39,44 @@ def get_supabase():
 supabase = get_supabase()
 BUCKET = "wadrobe-images"
 
+def load_style_profile(supabase):
+    """Load the saved personal style profile."""
+    response = (
+        supabase.table("style_profile")
+        .select("*")
+        .eq("id", 1)
+        .limit(1)
+        .execute()
+    )
+
+    if response.data:
+        return response.data[0]
+
+    return {}
+
+
+def save_style_profile(
+    supabase,
+    height_inches,
+    torso_proportion,
+    leg_proportion,
+    cover_knees,
+    style_preferences,
+):
+    """Save or update the single personal style profile."""
+    profile_data = {
+        "id": 1,
+        "height_inches": height_inches,
+        "torso_proportion": torso_proportion,
+        "leg_proportion": leg_proportion,
+        "cover_knees": cover_knees,
+        "style_preferences": style_preferences,
+    }
+
+    supabase.table("style_profile").upsert(
+        profile_data, on_conflict="id"
+    ).execute()
+
 st.title("👗 My Stylist AI")
 st.caption("Your personal wardrobe assistant")
 
@@ -233,18 +271,70 @@ with outfit_tab:
 
 with profile_tab:
     st.subheader("My Fit Profile")
-    st.write(
-        "We will add persistent profile settings in the next milestone."
-    )
-    height = st.text_input("Height (optional)", placeholder="e.g. 5 ft 3 in")
-    preferences = st.text_area(
-        "Styling preferences",
-        placeholder="Preferred lengths, colors, fits and occasions...",
-    )
-    st.caption(
-        "These fields are not saved yet. We'll connect them to the "
-        "database in the next milestone."
-    )
+
+    profile = load_style_profile(supabase)
+
+    with st.form("style_profile_form"):
+        height = st.number_input(
+            "Height (inches)",
+            min_value=36,
+            max_value=90,
+            value=int(profile.get("height_inches") or 63),
+            help="5 ft 3 in = 63 inches",
+        )
+
+        torso_options = ["Long torso", "Balanced", "Short torso"]
+        saved_torso = profile.get("torso_proportion", "Long torso")
+
+        torso = st.selectbox(
+            "Torso proportions",
+            torso_options,
+            index=(
+                torso_options.index(saved_torso)
+                if saved_torso in torso_options else 0
+            ),
+        )
+
+        leg_options = ["Short legs", "Balanced", "Long legs"]
+        saved_legs = profile.get("leg_proportion", "Short legs")
+
+        legs = st.selectbox(
+            "Leg proportions",
+            leg_options,
+            index=(
+                leg_options.index(saved_legs)
+                if saved_legs in leg_options else 0
+            ),
+        )
+
+        cover_knees = st.checkbox(
+            "Prefer outfits that cover my knees",
+            value=profile.get("cover_knees", True),
+        )
+
+        preferences = st.text_area(
+            "Styling preferences",
+            value=profile.get("style_preferences") or "",
+            placeholder=(
+                "Preferred lengths, colors, fits, occasions..."
+            ),
+        )
+
+        submitted = st.form_submit_button("Save my fit profile")
+
+        if submitted:
+            try:
+                save_style_profile(
+                    supabase,
+                    int(height),
+                    torso,
+                    legs,
+                    cover_knees,
+                    preferences,
+                )
+                st.success("Your fit profile is saved!")
+            except Exception as e:
+                st.error(f"Could not save profile: {e}")
 
 if st.button("Lock my wardrobe"):
     st.session_state.authenticated = False
